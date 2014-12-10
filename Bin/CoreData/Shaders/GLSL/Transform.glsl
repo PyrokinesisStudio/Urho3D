@@ -55,6 +55,12 @@ vec4 GetClipPos(vec3 worldPos)
     return ret;
 }
 
+vec4 GetPrevClipPos(vec3 worldPos)
+{
+    vec4 ret = cPrevViewProj * vec4(worldPos, 1.0);
+    return ret;
+}
+
 float GetZonePos(vec3 worldPos)
 {
     return clamp((cZone * vec4(worldPos, 1.0)).z, 0.0, 1.0);
@@ -94,6 +100,11 @@ vec3 GetWorldPos(mat4 modelMatrix)
     #else
         return (modelMatrix * iPos).xyz;
     #endif
+}
+
+vec3 GetPrevWorldPos()
+{
+    return (cPrevModel * iPos).xyz;
 }
 
 vec3 GetWorldNormal(mat4 modelMatrix)

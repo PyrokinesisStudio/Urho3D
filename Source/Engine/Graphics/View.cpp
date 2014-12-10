@@ -680,6 +680,8 @@ void View::SetCameraShaderParameters(Camera* camera, bool setProjection, bool ov
             graphics_->SetShaderParameter(VSP_VIEWPROJ, projection);
         else
             graphics_->SetShaderParameter(VSP_VIEWPROJ, projection * camera->GetView());
+
+        graphics_->SetShaderParameter(VSP_PREVVIEWPROJ, camera->GetPrevViewProjection());
     }
 }
 

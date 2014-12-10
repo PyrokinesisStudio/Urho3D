@@ -3,4 +3,5 @@
     <pass name="prepass" psdefines="PREPASS" />
     <pass name="material" />
     <pass name="deferred" psdefines="DEFERRED" />
+    <pass name="velocity" vs="Velocity" ps="Velocity" />
 </technique>

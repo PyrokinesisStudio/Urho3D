@@ -6,4 +6,5 @@
     <pass name="deferred" vsdefines="AO" psdefines="DEFERRED AO" />
     <pass name="depth" vs="Depth" ps="Depth" psdefines="ALPHAMASK" />
     <pass name="shadow" vs="Shadow" ps="Shadow" psdefines="ALPHAMASK" />
+    <pass name="velocity" vs="Velocity" ps="Velocity" />
 </technique>

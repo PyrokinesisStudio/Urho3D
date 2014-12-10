@@ -127,6 +127,8 @@ public:
     Matrix4 GetProjection(bool apiSpecific) const;
     /// Return view matrix.
     const Matrix3x4& GetView() const;
+    /// Return previous frame view projection matrix.
+    const Matrix4& GetPrevViewProjection() const;
     /// Return frustum near and far sizes.
     void GetFrustumSize(Vector3& near, Vector3& far) const;
     /// Return half view size.
@@ -192,6 +194,12 @@ private:
     mutable Matrix3x4 view_;
     /// Cached projection matrix.
     mutable Matrix4 projection_;
+    /// Cached previous frame view matrix.
+    mutable Matrix3x4 prevView_;
+    /// Cached previous frame projection matrix.
+    mutable Matrix4 prevProjection_;
+    /// Cached previous frame view projection matrix.
+    mutable Matrix4 prevViewProjection_;
     /// Cached frustum.
     mutable Frustum frustum_;
     /// View matrix dirty flag.

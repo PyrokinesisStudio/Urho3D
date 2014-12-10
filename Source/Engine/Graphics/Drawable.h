@@ -90,6 +90,8 @@ struct SourceBatch
     SharedPtr<Material> material_;
     /// World transform(s). For a skinned model, these are the bone transforms.
     const Matrix3x4* worldTransform_;
+    /// Previous frame World transform(s).
+    const Matrix3x4* prevWorldTransform_;
     /// Number of world transforms.
     unsigned numWorldTransforms_;
     /// %Geometry type.

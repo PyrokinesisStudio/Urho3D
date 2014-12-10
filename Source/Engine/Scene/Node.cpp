@@ -43,7 +43,12 @@ Node::Node(Context* context) :
     Animatable(context),
     networkUpdate_(false),
     worldTransform_(Matrix3x4::IDENTITY),
+    prevWorldTransform_(Matrix3x4::IDENTITY),
+    tempPrevWorldTransform_(Matrix3x4::IDENTITY),
+    firstFrame_(true),
     dirty_(false),
+    prevFrameDirty_(false),
+    frameNumber_(1),
     enabled_(true),
     enabledPrev_(true),
     parent_(0),
@@ -1648,6 +1653,24 @@ Component* Node::SafeCreateComponent(const String& typeName, StringHash type, Cr
         AddComponent(newComponent, id, mode);
         return newComponent;
     }
+}
+
+void Node::UpdatePrevWorldTransform() const
+{
+    if(dirty_)
+        UpdateWorldTransform();
+
+    if(firstFrame_)
+    {
+        prevWorldTransform_ = worldTransform_;
+        tempPrevWorldTransform_ = worldTransform_;
+        firstFrame_ = false;
+    }
+
+    prevWorldTransform_ = tempPrevWorldTransform_;
+    tempPrevWorldTransform_ = worldTransform_;
+
+    //prevFrameDirty_ = false;
 }
 
 void Node::UpdateWorldTransform() const

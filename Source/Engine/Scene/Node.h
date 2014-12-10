@@ -356,6 +356,11 @@ public:
         return worldTransform_;
     }
 
+    void UpdatePrevWorldTransform() const;
+
+    /// Return previous frame world space transform matrix.
+    const Matrix3x4& GetPreviousWorldTransform() const {return prevWorldTransform_;};
+
     /// Convert a local space position to world space.
     Vector3 LocalToWorld(const Vector3& position) const;
     /// Convert a local space position or rotation to world space.
@@ -501,8 +506,18 @@ private:
 
     /// World-space transform matrix.
     mutable Matrix3x4 worldTransform_;
+    /// Previous World-space transform matrix.
+    mutable Matrix3x4 prevWorldTransform_;
+    /// To store temporary previous frame transform until next frame refreshed.
+    mutable Matrix3x4 tempPrevWorldTransform_;
+    /// First frame flag.
+    mutable bool firstFrame_;
     /// World transform needs update flag.
     mutable bool dirty_;
+    /// Previous frame update flag.
+    mutable bool prevFrameDirty_;
+    /// Frame number.
+    mutable unsigned frameNumber_;
     /// Enabled flag.
     bool enabled_;
     /// Last SetEnabled flag before any SetDeepEnabled.

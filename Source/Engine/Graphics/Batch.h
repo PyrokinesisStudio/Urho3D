@@ -61,6 +61,7 @@ struct Batch
         geometry_(rhs.geometry_),
         material_(rhs.material_),
         worldTransform_(rhs.worldTransform_),
+        prevWorldTransform_(rhs.prevWorldTransform_),
         numWorldTransforms_(rhs.numWorldTransforms_),
         lightQueue_(0),
         geometryType_(rhs.geometryType_),
@@ -86,6 +87,8 @@ struct Batch
     Material* material_;
     /// World transform(s). For a skinned model, these are the bone transforms.
     const Matrix3x4* worldTransform_;
+    /// Previous frame world transform(s).
+    const Matrix3x4* prevWorldTransform_;
     /// Number of world transforms.
     unsigned numWorldTransforms_;
     /// Camera.
@@ -127,6 +130,8 @@ struct InstanceData
     
     /// World transform.
     const Matrix3x4* worldTransform_;
+    /// Previous frame world transform.
+    const Matrix3x4* prevWorldTransform_;
     /// Distance from camera.
     float distance_;
 };
@@ -161,6 +166,7 @@ struct BatchGroup : public Batch
         for (unsigned i = 0; i < batch.numWorldTransforms_; ++i)
         {
             newInstance.worldTransform_ = &batch.worldTransform_[i];
+            newInstance.prevWorldTransform_ = &batch.prevWorldTransform_[i];
             instances_.Push(newInstance);
         }
     }

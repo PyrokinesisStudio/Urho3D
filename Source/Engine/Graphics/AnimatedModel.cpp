@@ -368,6 +368,8 @@ void AnimatedModel::SetModel(Model* model, bool createBones)
             else
             {
                 batches_[i].geometryType_ = GEOM_STATIC;
+                node_->UpdatePrevWorldTransform();
+                batches_[i].prevWorldTransform_ = &node_->GetPreviousWorldTransform();
                 batches_[i].worldTransform_ = &node_->GetWorldTransform();
                 batches_[i].numWorldTransforms_ = 1;
             }

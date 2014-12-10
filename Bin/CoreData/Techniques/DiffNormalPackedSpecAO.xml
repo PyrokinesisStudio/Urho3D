@@ -6,4 +6,5 @@
     <pass name="deferred" vsdefines="NORMALMAP AO" psdefines="DEFERRED NORMALMAP PACKEDNORMAL SPECMAP AO" />
     <pass name="depth" vs="Depth" ps="Depth" />
     <pass name="shadow" vs="Shadow" ps="Shadow" />
+    <pass name="velocity" vs="Velocity" ps="Velocity" />
 </technique>

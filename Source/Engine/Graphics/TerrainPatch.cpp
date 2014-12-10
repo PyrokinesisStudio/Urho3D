@@ -113,6 +113,8 @@ void TerrainPatch::ProcessRayQuery(const RayOctreeQuery& query, PODVector<RayQue
 void TerrainPatch::UpdateBatches(const FrameInfo& frame)
 {
     const Matrix3x4& worldTransform = node_->GetWorldTransform();
+    node_->UpdatePrevWorldTransform();
+    const Matrix3x4& prevWorldTransform = node_->GetPreviousWorldTransform();
     distance_ = frame.camera_->GetDistance(GetWorldBoundingBox().Center());
     
     float scale = worldTransform.Scale().DotProduct(DOT_SCALE);
@@ -120,7 +122,8 @@ void TerrainPatch::UpdateBatches(const FrameInfo& frame)
     
     batches_[0].distance_ = distance_;
     batches_[0].worldTransform_ = &worldTransform;
-    
+    batches_[0].prevWorldTransform_ = &prevWorldTransform;
+
     unsigned newLodLevel = 0;
     for (unsigned i = 0; i < lodErrors_.Size(); ++i)
     {

@@ -43,6 +43,7 @@ const char* GEOMETRY_CATEGORY = "Geometry";
 SourceBatch::SourceBatch() :
     distance_(0.0f),
     geometry_(0),
+    prevWorldTransform_(&Matrix3x4::IDENTITY),
     worldTransform_(&Matrix3x4::IDENTITY),
     numWorldTransforms_(1),
     geometryType_(GEOM_STATIC),
@@ -131,12 +132,15 @@ void Drawable::Update(const FrameInfo& frame)
 void Drawable::UpdateBatches(const FrameInfo& frame)
 {
     const BoundingBox& worldBoundingBox = GetWorldBoundingBox();
+    node_->UpdatePrevWorldTransform();
+    const Matrix3x4& prevWorldTransform = node_->GetPreviousWorldTransform();
     const Matrix3x4& worldTransform = node_->GetWorldTransform();
     distance_ = frame.camera_->GetDistance(worldBoundingBox.Center());
 
     for (unsigned i = 0; i < batches_.Size(); ++i)
     {
         batches_[i].distance_ = distance_;
+        batches_[i].prevWorldTransform_ = &prevWorldTransform;
         batches_[i].worldTransform_ = &worldTransform;
     }
 

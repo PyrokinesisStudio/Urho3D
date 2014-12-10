@@ -381,11 +381,32 @@ const Matrix4& Camera::GetProjection() const
 {
     if (projectionDirty_)
     {
+        // Update previous frame projection
+        prevProjection_ = projection_;
+
         projection_ = GetProjection(true);
         projectionDirty_ = false;
     }
 
     return projection_;
+}
+
+const Matrix4& Camera::GetPrevViewProjection() const
+{
+    if (projectionDirty_)
+    {
+        projection_ = GetProjection();
+        projectionDirty_ = false;
+    }
+    if (viewDirty_)
+    {
+        view_ = GetView();
+        viewDirty_ = false;
+    }
+
+    prevViewProjection_ = prevProjection_ * prevView_;
+
+    return prevViewProjection_;
 }
 
 Matrix4 Camera::GetProjection(bool apiSpecific) const
@@ -586,6 +607,9 @@ const Matrix3x4& Camera::GetView() const
 {
     if (viewDirty_)
     {
+        // Update previous frame view matrix
+        prevView_ = view_;
+
         // Note: view matrix is unaffected by node or parent scale
         view_ = GetEffectiveWorldTransform().Inverse();
         viewDirty_ = false;
