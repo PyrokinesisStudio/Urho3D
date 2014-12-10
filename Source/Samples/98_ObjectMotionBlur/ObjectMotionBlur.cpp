@@ -37,6 +37,7 @@
 #include "Text.h"
 #include "UI.h"
 #include "Zone.h"
+#include "XMLFile.h"
 
 #include "ObjectMotionBlur.h"
 
@@ -57,8 +58,11 @@ void ObjectMotionBlur::Start()
     // Execute base class startup
     Sample::Start();
 
+    // Set fps and render path
     Engine* engine = GetSubsystem<Engine>();
     engine->SetMaxFps(30);
+    //Graphics* graphics = GetSubsystem<Graphics>();
+    //graphics->setre
 
     // Create the scene content
     CreateScene();
@@ -158,9 +162,11 @@ void ObjectMotionBlur::CreateInstructions()
 
 void ObjectMotionBlur::SetupViewport()
 {
+    ResourceCache* cache = GetSubsystem<ResourceCache>();
     Renderer* renderer = GetSubsystem<Renderer>();
     renderer->SetDynamicInstancing(false);
-    
+    renderer->SetDefaultRenderPath(cache->GetResource<XMLFile>("RenderPaths/ForwardMotionBlur.xml"));
+
     // Set up a viewport to the Renderer subsystem so that the 3D scene can be seen
     SharedPtr<Viewport> viewport(new Viewport(context_, scene_, cameraNode_->GetComponent<Camera>()));
     renderer->SetViewport(0, viewport);
