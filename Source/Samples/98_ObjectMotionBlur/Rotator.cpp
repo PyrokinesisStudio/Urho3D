@@ -50,7 +50,7 @@ void Rotator::Update(float timeStep)
     counter_ += timeStep * speed_;
     // Components have their scene node as a member variable for convenient access. Rotate the scene node now: construct a
     // rotation quaternion from Euler angles, scale rotation speed with the scene update time step
-    //node_->Rotate(Quaternion(rotationSpeed_.x_ * timeStep, rotationSpeed_.y_ * timeStep, rotationSpeed_.z_ * timeStep));
+    node_->Rotate(Quaternion(rotationSpeed_.x_ * timeStep, rotationSpeed_.y_ * timeStep, rotationSpeed_.z_ * timeStep));
     node_->SetPosition(initPos_);
     node_->Translate(Vector3(range_ * cos(counter_), 0.0f, 0.0f));
 }
