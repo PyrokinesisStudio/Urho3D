@@ -58,11 +58,9 @@ void ObjectMotionBlur::Start()
     // Execute base class startup
     Sample::Start();
 
-    // Set fps and render path
+    // Set max fps
     Engine* engine = GetSubsystem<Engine>();
     engine->SetMaxFps(30);
-    //Graphics* graphics = GetSubsystem<Graphics>();
-    //graphics->setre
 
     // Create the scene content
     CreateScene();
