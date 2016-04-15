@@ -23,6 +23,8 @@ uniform vec4 cGBufferOffsets;
 uniform vec3 cLightDir;
 uniform vec4 cLightPos;
 uniform mat4 cModel;
+uniform mat4 cView;
+uniform mat4 cViewInv;
 uniform mat4 cViewProj;
 uniform vec4 cUOffset;
 uniform vec4 cVOffset;
@@ -65,6 +67,10 @@ uniform vec4 cMatDiffColor;
 uniform vec3 cMatEmissiveColor;
 uniform vec3 cMatEnvMapColor;
 uniform vec4 cMatSpecColor;
+#ifdef PBR
+    uniform float cRoughnessPS;
+    uniform float cMetallicPS;
+#endif
 uniform float cNearClipPS;
 uniform float cFarClipPS;
 uniform vec4 cShadowCubeAdjust;
@@ -99,6 +105,8 @@ uniform CameraVS
     vec4 cDepthMode;
     vec3 cFrustumSize;
     vec4 cGBufferOffsets;
+    mat4 cView;
+    mat4 cViewInv;
     mat4 cViewProj;
     vec4 cClipPlane;
 };
@@ -190,6 +198,10 @@ uniform MaterialPS
     vec3 cMatEmissiveColor;
     vec3 cMatEnvMapColor;
     vec4 cMatSpecColor;
+    #ifdef PBR
+        float cRoughnessPS;
+        float cMetallicPS;
+    #endif
 };
 #endif
 

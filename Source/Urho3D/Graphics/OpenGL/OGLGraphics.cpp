@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -54,6 +54,7 @@
 #include "../../Graphics/Terrain.h"
 #include "../../Graphics/TerrainPatch.h"
 #include "../../Graphics/Texture2D.h"
+#include "../../Graphics/Texture2DArray.h"
 #include "../../Graphics/Texture3D.h"
 #include "../../Graphics/TextureCube.h"
 #include "../../Graphics/VertexBuffer.h"
@@ -81,7 +82,7 @@ extern "C"
 }
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 // Prefer the high-performance GPU on switchable GPU systems
 #include <windows.h>
 extern "C"
@@ -326,6 +327,11 @@ bool Graphics::SetMode(int width, int height, bool fullscreen, bool borderless, 
 
     bool maximize = false;
 
+#if defined(IOS) || defined(TVOS)
+    // iOS and tvOS app always take the fullscreen (and with status bar hidden)
+    fullscreen = true;
+#endif
+
     // Fullscreen or Borderless can not be resizable
     if (fullscreen || borderless)
         resizable = false;
@@ -458,6 +464,9 @@ bool Graphics::SetMode(int width, int height, bool fullscreen, bool borderless, 
             flags |= SDL_WINDOW_RESIZABLE;
         if (borderless)
             flags |= SDL_WINDOW_BORDERLESS;
+#ifdef __APPLE__
+            flags |= SDL_WINDOW_ALLOW_HIGHDPI;
+#endif
 
         SDL_SetHint(SDL_HINT_ORIENTATIONS, orientations_.CString());
 
@@ -498,7 +507,7 @@ bool Graphics::SetMode(int width, int height, bool fullscreen, bool borderless, 
         if (maximize)
         {
             Maximize();
-            SDL_GetWindowSize(impl_->window_, &width, &height);
+            SDL_GL_GetDrawableSize(impl_->window_, &width, &height);
         }
 
         // Create/restore context and GPU objects and set initial renderstate
@@ -524,7 +533,7 @@ bool Graphics::SetMode(int width, int height, bool fullscreen, bool borderless, 
     tripleBuffer_ = tripleBuffer;
     multiSample_ = multiSample;
 
-    SDL_GetWindowSize(impl_->window_, &width_, &height_);
+    SDL_GL_GetDrawableSize(impl_->window_, &width_, &height_);
     if (!fullscreen)
         SDL_GetWindowPosition(impl_->window_, &position_.x_, &position_.y_);
 
@@ -617,6 +626,15 @@ bool Graphics::TakeScreenShot(Image& destImage)
 {
     URHO3D_PROFILE(TakeScreenShot);
 
+    if (!IsInitialized())
+        return false;
+
+    if (IsDeviceLost())
+    {
+        URHO3D_LOGERROR("Can not take screenshot while device is lost");
+        return false;
+    }
+
     ResetRenderTargets();
 
     destImage.SetSize(width_, height_, 3);
@@ -637,7 +655,7 @@ bool Graphics::BeginFrame()
     {
         int width, height;
 
-        SDL_GetWindowSize(impl_->window_, &width, &height);
+        SDL_GL_GetDrawableSize(impl_->window_, &width, &height);
         if (width != width_ || height != height_)
             SetMode(width, height);
     }
@@ -2144,7 +2162,7 @@ void Graphics::WindowResized()
 
     int newWidth, newHeight;
 
-    SDL_GetWindowSize(impl_->window_, &newWidth, &newHeight);
+    SDL_GL_GetDrawableSize(impl_->window_, &newWidth, &newHeight);
     if (newWidth == width_ && newHeight == height_)
         return;
 
@@ -2387,7 +2405,7 @@ void Graphics::Release(bool clearGPUObjects, bool closeWindow)
     // End fullscreen mode first to counteract transition and getting stuck problems on OS X
 #if defined(__APPLE__) && !defined(IOS)
     if (closeWindow && fullscreen_ && !externalWindow_)
-        SDL_SetWindowFullscreen(impl_->window_, SDL_FALSE);
+        SDL_SetWindowFullscreen(impl_->window_, 0);
 #endif
 
     if (impl_->context_)
@@ -3292,6 +3310,7 @@ void RegisterGraphicsLibrary(Context* context)
     Shader::RegisterObject(context);
     Technique::RegisterObject(context);
     Texture2D::RegisterObject(context);
+    Texture2DArray::RegisterObject(context);
     Texture3D::RegisterObject(context);
     TextureCube::RegisterObject(context);
     Camera::RegisterObject(context);

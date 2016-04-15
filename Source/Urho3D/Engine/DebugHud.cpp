@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -224,7 +224,7 @@ void DebugHud::SetProfilerMaxDepth(unsigned depth)
 
 void DebugHud::SetProfilerInterval(float interval)
 {
-    profilerInterval_ = (unsigned)Max((int)(interval * 1000.0f), 0);
+    profilerInterval_ = Max((unsigned)(interval * 1000.0f), 0U);
 }
 
 void DebugHud::SetUseRendererStats(bool enable)

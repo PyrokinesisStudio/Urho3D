@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -258,7 +258,7 @@ void DecalSet::SetMaterial(Material* material)
 void DecalSet::SetMaxVertices(unsigned num)
 {
     // Never expand to 32 bit indices
-    num = (unsigned)Clamp((int)num, MIN_VERTICES, MAX_VERTICES);
+    num = (unsigned)Clamp(num, MIN_VERTICES, MAX_VERTICES);
 
     if (num != maxVertices_)
     {

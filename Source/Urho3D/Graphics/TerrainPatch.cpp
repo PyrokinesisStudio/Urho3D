@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2008-2015 the Urho3D project.
+// Copyright (c) 2008-2016 the Urho3D project.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -280,13 +280,13 @@ void TerrainPatch::OnWorldBoundingBoxUpdate()
 unsigned TerrainPatch::GetCorrectedLodLevel(unsigned lodLevel)
 {
     if (north_)
-        lodLevel = (unsigned)Min((int)lodLevel, north_->GetLodLevel() + 1);
+        lodLevel = Min(lodLevel, north_->GetLodLevel() + 1);
     if (south_)
-        lodLevel = (unsigned)Min((int)lodLevel, south_->GetLodLevel() + 1);
+        lodLevel = Min(lodLevel, south_->GetLodLevel() + 1);
     if (west_)
-        lodLevel = (unsigned)Min((int)lodLevel, west_->GetLodLevel() + 1);
+        lodLevel = Min(lodLevel, west_->GetLodLevel() + 1);
     if (east_)
-        lodLevel = (unsigned)Min((int)lodLevel, east_->GetLodLevel() + 1);
+        lodLevel = Min(lodLevel, east_->GetLodLevel() + 1);
 
     return lodLevel;
 }
