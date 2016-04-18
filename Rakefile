@@ -822,7 +822,7 @@ end
 
 # Usage: wait_for_block('This is a long function call...') { call_a_func } or abort
 #        wait_for_block('This is a long system call...') { system 'do_something' } or abort
-def wait_for_block comment = '', retries = -1, retry_interval = 60, &block
+def wait_for_block comment = '', retries = -1, retry_interval = 60
   # When not using Xcode, execute the code block in full speed
   unless ENV['XCODE']
     puts comment; $stdout.flush
@@ -830,7 +830,7 @@ def wait_for_block comment = '', retries = -1, retry_interval = 60, &block
   end
 
   # Wait until the code block is completed or it is killed externally by user via Ctrl+C or when it exceeds the number of retries (if the retries parameter is provided)
-  thread = Thread.new &block
+  thread = Thread.new { rc = yield; Thread.main.wakeup; rc }
   thread.priority = 1   # Make the worker thread has higher priority than the main thread
   str = comment
   retries = retries * 60 / retry_interval unless retries == -1
