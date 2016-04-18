@@ -32,6 +32,7 @@
 #include <Urho3D/Graphics/StaticModel.h>
 #include <Urho3D/Graphics/Terrain.h>
 #include <Urho3D/Graphics/Zone.h>
+#include <Urho3D/Graphics/RibbonTrail.h>
 #include <Urho3D/Input/Input.h>
 #include <Urho3D/IO/FileSystem.h>
 #include <Urho3D/Physics/CollisionShape.h>
@@ -162,6 +163,16 @@ void VehicleDemo::CreateVehicle()
 {
     Node* vehicleNode = scene_->CreateChild("Vehicle");
     vehicleNode->SetPosition(Vector3(0.0f, 5.0f, 0.0f));
+
+    Node *tailNode = vehicleNode->CreateChild();
+    //tailNode->Translate(Vector3(0.0f, 1.0f, 0.1f), TransformSpace::TS_LOCAL); // translate a tail relatively a object
+    RibbonTrail* tailGen = tailNode->CreateComponent<RibbonTrail>();
+    tailGen->SetTailLength(1.0f); // set segment length
+    tailGen->SetNumTails(50);     // set num of segments
+    tailGen->SetWidthScale(1.0f); // side scale
+    tailGen->SetColorForHead(Color(1.0f, 1.0f, 1.0f, 1.0f));
+    tailGen->SetColorForTip(Color(0.0f, 0.0f, 1.0f, 0.0f));
+    tailGen->SetMatchNodeOrientation(true);
 
     // Create the vehicle logic component
     vehicle_ = vehicleNode->CreateComponent<Vehicle>();

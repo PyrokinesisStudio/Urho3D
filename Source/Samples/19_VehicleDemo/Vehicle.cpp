@@ -130,7 +130,7 @@ void Vehicle::Init()
 
     node_->SetScale(Vector3(1.5f, 1.0f, 3.0f));
     hullObject->SetModel(cache->GetResource<Model>("Models/Box.mdl"));
-    hullObject->SetMaterial(cache->GetResource<Material>("Materials/Stone.xml"));
+    hullObject->SetMaterial(cache->GetResource<Material>("Materials/StoneWire.xml"));
     hullObject->SetCastShadows(true);
     hullShape->SetBox(Vector3::ONE);
     hullBody_->SetMass(4.0f);

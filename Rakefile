@@ -350,14 +350,11 @@ task :ci do
     system 'rake ci_push_bindings' or abort
     next
   end
-  # Enable more granular timeup check for Xcode
-  system 'touch enabled_time_check.log' if ENV['XCODE']
-  if !system "bash -c 'rake make'"
+  if !wait_for_block { system "bash -c 'rake make'" }
     abort 'Failed to build Urho3D library' unless File.exists?('already_timeup.log')
     $stderr.puts "Skipped the rest of the CI processes due to insufficient time"
     next
   end
-  File.delete 'enabled_time_check.log' if ENV['XCODE']
   if ENV['URHO3D_TESTING'] && !timeup
     # Multi-config CMake generators use different test target name than single-config ones for no good reason
     test = "rake make target=#{ENV['OS'] || ENV['XCODE'] ? 'RUN_TESTS' : 'test'}"
@@ -370,8 +367,11 @@ task :ci do
   unless ENV['CI'] && (ENV['IOS'] || ENV['WEB']) && ENV['PACKAGE_UPLOAD'] || ENV['XCODE_64BIT_ONLY'] || timeup
     # Staged-install Urho3D SDK when on Travis-CI; normal install when on AppVeyor
     ENV['DESTDIR'] = ENV['HOME'] || Dir.home unless ENV['APPVEYOR']
-    puts "Installing Urho3D SDK to #{ENV['DESTDIR'] ? "#{ENV['DESTDIR']}/usr/local" : 'default system-wide location'}..."; $stdout.flush
-    system "bash -c 'rake make target=install >/dev/null'" or abort 'Failed to install Urho3D SDK'
+    if !wait_for_block("Installing Urho3D SDK to #{ENV['DESTDIR'] ? "#{ENV['DESTDIR']}/usr/local" : 'default system-wide location'}...") { system "bash -c 'rake make target=install >/dev/null'" }
+      abort 'Failed to install Urho3D SDK' unless File.exists?('already_timeup.log')
+      $stderr.puts "Skipped the rest of the CI processes due to insufficient time"
+      next
+    end
     # Alternate to use in-the-source build tree for test coverage
     ENV['build_tree'] = '.' unless ENV['APPVEYOR']
     # Ensure the following variables are auto-discovered during scaffolding test
@@ -646,12 +646,6 @@ task :ci_timer do
   timeup
 end
 
-# Usage: NOT Intended to be used manually
-desc 'Check if the time is up when the time check is enabled'
-task :ci_timeup do
-  abort "Time up!" if File.exists?('enabled_time_check.log') && timeup(true)
-end
-
 # Always call this function last in the multiple conditional check so that the checkpoint message does not being echoed unnecessarily
 def timeup quiet = false
   unless File.exists?('start_time.log')
@@ -826,16 +820,23 @@ EOF") { |stdout| echo = false; while output = stdout.gets do if echo && /#\s#/ !
   end
 end
 
-# Usage: wait_for_block("This is a long function call...") { Thread.current[:exit_code] = call_a_func } or abort
-#        wait_for_block("This is a long system call...") { system "do_something"; Thread.current[:exit_code] = $?.exitstatus } or abort
-def wait_for_block comment = '', retries = -1, retry_interval = 60, exit_code_sym = 'exit_code', &block
+# Usage: wait_for_block('This is a long function call...') { call_a_func } or abort
+#        wait_for_block('This is a long system call...') { system 'do_something' } or abort
+def wait_for_block comment = '', retries = -1, retry_interval = 60
+  # When not using Xcode, execute the code block in full speed
+  unless ENV['XCODE']
+    puts comment; $stdout.flush
+    return yield
+  end
+
   # Wait until the code block is completed or it is killed externally by user via Ctrl+C or when it exceeds the number of retries (if the retries parameter is provided)
-  thread = Thread.new &block
+  thread = Thread.new { rc = yield; Thread.main.wakeup; rc }
+  thread.priority = 1   # Make the worker thread has higher priority than the main thread
   str = comment
   retries = retries * 60 / retry_interval unless retries == -1
-  until retries == 0
-    if thread.status == false
-      thread.join
+  until thread.status == false
+    if retries == 0 || timeup(true)
+      thread.kill   # TODO: also kill the child subproceses spawned by the worker thread
       break
     end
     print str; str = '.'; $stdout.flush   # Flush the standard output stream in case it is buffered to prevent Travis-CI into thinking that the build/test has stalled
@@ -843,7 +844,8 @@ def wait_for_block comment = '', retries = -1, retry_interval = 60, exit_code_sy
     retries -= 1 if retries > 0
   end
   puts "\n" if str == '.'; $stdout.flush
-  return retries == 0 ? nil : (exit_code_sym ? thread[exit_code_sym] : 0)
+  thread.join
+  return thread.value
 end
 
 def append_new_release release, filename = '../urho3d.github.io/_data/urho3d.json'
