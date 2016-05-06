@@ -114,6 +114,21 @@ vec3 GetBillboardNormal(vec4 iPos, vec3 iDirection, vec3 iCameraPos)
 }
 #endif
 
+#ifdef TRAIL
+vec3 GetTrailPos(vec4 iPos, vec3 iScale, vec3 iFront, mat4 modelMatrix)
+{
+    //return (vec4((iPos.xyz + iScale), 1.0) * modelMatrix).xyz;
+    vec3 up = normalize(cCameraPos - iPos.xyz);
+    vec3 right = normalize(cross(iFront, up));
+    return (vec4((iPos.xyz + right * iScale), 1.0) * modelMatrix).xyz;
+}
+
+vec3 GetTrailNormal(vec4 iPos)
+{
+    return normalize(cCameraPos - iPos.xyz);
+}
+#endif
+
 #if defined(SKINNED)
     #define iModelMatrix GetSkinMatrix(iBlendWeights, iBlendIndices)
 #elif defined(INSTANCED)
@@ -128,6 +143,8 @@ vec3 GetWorldPos(mat4 modelMatrix)
         return GetBillboardPos(iPos, iTexCoord1, modelMatrix);
     #elif defined(DIRBILLBOARD)
         return GetBillboardPos(iPos, iNormal, iTangent.xyz, modelMatrix);
+    #elif defined(TRAIL)
+        return GetTrailPos(iPos, iNormal, iTangent.xyz, modelMatrix);
     #else
         return (iPos * modelMatrix).xyz;
     #endif
@@ -139,6 +156,8 @@ vec3 GetWorldNormal(mat4 modelMatrix)
         return GetBillboardNormal();
     #elif defined(DIRBILLBOARD)
         return GetBillboardNormal(iPos, iNormal, iTangent.xyz);
+    #elif defined(TRAIL)
+        return GetTrailNormal(iPos);
     #else
         return normalize(iNormal * GetNormalMatrix(modelMatrix));
     #endif
