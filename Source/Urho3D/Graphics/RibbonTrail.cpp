@@ -242,7 +242,8 @@ void RibbonTrail::UpdateTail()
     //if(points_.Size() == 0 && path > 0.01f)
     if(points_.Size() == 0 && path > M_EPSILON)
     {
-        Vector3 forwardmotion = matchNode_ ? GetNode()->GetWorldDirection() : (previousPosition_ - worldPosition).Normalized();
+        Vector3 forwardmotion = matchNode_ ?
+                    GetNode()->GetWorldDirection() : (previousPosition_ - worldPosition).Normalized();
 
         Point startPoint;
         startPoint.position_ = previousPosition_;
@@ -265,7 +266,8 @@ void RibbonTrail::UpdateTail()
     // Add more points
     if (points_.Size() > 1)
     {
-        Vector3 forwardmotion = matchNode_ ? GetNode()->GetWorldDirection() : (previousPosition_ - worldPosition).Normalized();
+        Vector3 forwardmotion = matchNode_ ?
+                    GetNode()->GetWorldDirection() : (previousPosition_ - worldPosition).Normalized();
 
         // Add more point if path exceeded tail length
         if(path > tailLength_)
@@ -282,7 +284,8 @@ void RibbonTrail::UpdateTail()
         {
             // Updating recent tail
             points_.Back().position_ = worldPosition;
-            points_.Back().forward_ = forwardmotion;
+            if(forwardmotion != Vector3::ZERO)
+                points_.Back().forward_ = forwardmotion;
         }
     }
 
@@ -503,7 +506,7 @@ void RibbonTrail::UpdateVertexBuffer(const FrameInfo& frame)
 
     // copy new mesh to vertex buffer
     unsigned meshVertexCount = tailMesh_.Size();
-    batches_[0].geometry_->SetDrawRange(TRIANGLE_LIST, 0, (numTails - 1) * 6, false);
+    batches_[0].geometry_->SetDrawRange(TRIANGLE_LIST, 0, (numPoints - 1) * 6, false);
     bufferDirty_ = false;
     forceUpdate_ = false;
 

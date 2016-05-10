@@ -193,6 +193,9 @@ static const char* lightVSVariations[] =
     "PERPIXEL DIRLIGHT SHADOW ",
     "PERPIXEL SPOTLIGHT SHADOW ",
     "PERPIXEL POINTLIGHT SHADOW ",
+    "PERPIXEL DIRLIGHT SHADOW NORMALOFFSET ",
+    "PERPIXEL SPOTLIGHT SHADOW NORMALOFFSET ",
+    "PERPIXEL POINTLIGHT SHADOW NORMALOFFSET "
 };
 
 static const char* vertexLightVSVariations[] =
@@ -229,7 +232,15 @@ static const char* lightPSVariations[] =
     "PERPIXEL DIRLIGHT SPECULAR SHADOW ",
     "PERPIXEL SPOTLIGHT SPECULAR SHADOW ",
     "PERPIXEL POINTLIGHT SPECULAR SHADOW ",
-    "PERPIXEL POINTLIGHT CUBEMASK SPECULAR SHADOW "
+    "PERPIXEL POINTLIGHT CUBEMASK SPECULAR SHADOW ",
+    "PERPIXEL DIRLIGHT SHADOW NORMALOFFSET ",
+    "PERPIXEL SPOTLIGHT SHADOW NORMALOFFSET ",
+    "PERPIXEL POINTLIGHT SHADOW NORMALOFFSET ",
+    "PERPIXEL POINTLIGHT CUBEMASK SHADOW NORMALOFFSET ",
+    "PERPIXEL DIRLIGHT SPECULAR SHADOW NORMALOFFSET ",
+    "PERPIXEL SPOTLIGHT SPECULAR SHADOW NORMALOFFSET ",
+    "PERPIXEL POINTLIGHT SPECULAR SHADOW NORMALOFFSET ",
+    "PERPIXEL POINTLIGHT CUBEMASK SPECULAR SHADOW NORMALOFFSET "
 };
 
 static const char* heightFogVariations[] =
@@ -262,6 +273,7 @@ Renderer::Renderer(Context* context) :
     occluderSizeThreshold_(0.025f),
     mobileShadowBiasMul_(2.0f),
     mobileShadowBiasAdd_(0.0001f),
+    mobileNormalOffsetMul_(2.0f),
     numOcclusionBuffers_(0),
     numShadowCameras_(0),
     shadersChangedFrameNumber_(M_MAX_UNSIGNED),
@@ -491,6 +503,11 @@ void Renderer::SetMobileShadowBiasMul(float mul)
 void Renderer::SetMobileShadowBiasAdd(float add)
 {
     mobileShadowBiasAdd_ = add;
+}
+
+void Renderer::SetMobileNormalOffsetMul(float mul)
+{
+    mobileNormalOffsetMul_ = mul;
 }
 
 void Renderer::SetOccluderSizeThreshold(float screenSize)
@@ -1163,7 +1180,10 @@ void Renderer::SetBatchShaders(Batch& batch, Technique* tech, bool allowShadows)
                 psi += LPS_SPEC;
             if (allowShadows && lightQueue->shadowMap_)
             {
-                vsi += LVS_SHADOW;
+                if (light->GetShadowBias().normalOffset_ > 0.0f)
+                    vsi += LVS_SHADOWNORMALOFFSET;
+                else
+                    vsi += LVS_SHADOW;
                 psi += LPS_SHADOW;
             }
 
@@ -1254,7 +1274,12 @@ void Renderer::SetLightVolumeBatchShaders(Batch& batch, Camera* camera, const St
     }
 
     if (batch.lightQueue_->shadowMap_)
-        psi += DLPS_SHADOW;
+    {
+        if (light->GetShadowBias().normalOffset_ > 0.0)
+            psi += DLPS_SHADOWNORMALOFFSET;
+        else
+            psi += DLPS_SHADOW;
+    }
 
     if (specularLighting_ && light->GetSpecularIntensity() > 0.0f)
         psi += DLPS_SPEC;
@@ -1585,9 +1610,9 @@ void Renderer::LoadShaders()
     for (unsigned i = 0; i < MAX_DEFERRED_LIGHT_PS_VARIATIONS; ++i)
     {
         deferredLightPSVariations_[i] = lightPSVariations[i % DLPS_ORTHO];
-        if (i & DLPS_SHADOW)
+        if ((i % DLPS_ORTHO) >= DLPS_SHADOW)
             deferredLightPSVariations_[i] += GetShadowVariations();
-        if (i & DLPS_ORTHO)
+        if (i >= DLPS_ORTHO)
             deferredLightPSVariations_[i] += "ORTHO ";
     }
 
