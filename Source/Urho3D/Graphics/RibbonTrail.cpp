@@ -40,6 +40,14 @@ namespace Urho3D
 {
 
 extern const char* GEOMETRY_CATEGORY;
+static const unsigned MAX_TAIL_COLUMN = 16;
+
+const char* trailTypeNames[] =
+{
+    "Face Camera",
+    "Bone",
+    0
+};
 
 inline bool CompareTails(Point* lhs, Point* rhs)
 {
@@ -55,18 +63,22 @@ RibbonTrail::RibbonTrail(Context* context) :
     indexBuffer_(new IndexBuffer(context_)),
     bufferDirty_(true),
     previousPosition_(Vector3::ZERO),
-    pointNum_(0),
+    numPoints_(0),
     lifetime_(1.0f),
-    tailLength_(0.1f),
-    scale_(0.2f),
-    tailTipColor_(Color(1.0f, 1.0f, 1.0f, 0.0f)),
-    tailHeadColor_(Color(1.0f, 1.0f, 1.0f, 1.0f)),
-    matchNode_(false),
+    vertexDistance_(0.1f),
+    width_(0.2f),
+    startScale_(1.0f),
+    endScale_(1.0f),
+    endColor_(Color(1.0f, 1.0f, 1.0f, 0.0f)),
+    startColor_(Color(1.0f, 1.0f, 1.0f, 1.0f)),
     lastUpdateFrameNumber_(M_MAX_UNSIGNED),
     needUpdate_(false),
     sorted_(false),
     previousOffset_(Vector3::ZERO),
-    forceUpdate_(false)
+    forceUpdate_(false),
+    trailType_(TT_FACE_CAMERA),
+    tailColumn_(1),
+    emitting_(true)
 {
     geometry_->SetVertexBuffer(0, vertexBuffer_);
     geometry_->SetIndexBuffer(indexBuffer_);
@@ -75,7 +87,7 @@ RibbonTrail::RibbonTrail(Context* context) :
 
     batches_.Resize(1);
     batches_[0].geometry_ = geometry_;
-    batches_[0].geometryType_ = GEOM_TRAIL;
+    batches_[0].geometryType_ = GEOM_TRAIL_FACE_CAMERA;
     batches_[0].worldTransform_ = &transforms_;
     batches_[0].numWorldTransforms_ = 1;
 
@@ -95,13 +107,17 @@ void RibbonTrail::RegisterObject(Context* context)
     URHO3D_ACCESSOR_ATTRIBUTE("Is Enabled", IsEnabled, SetEnabled, bool, true, AM_DEFAULT);
     URHO3D_COPY_BASE_ATTRIBUTES(Drawable);
 	URHO3D_MIXED_ACCESSOR_ATTRIBUTE("Material", GetMaterialAttr, SetMaterialAttr, ResourceRef, ResourceRef(Material::GetTypeStatic()), AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("Emittting", IsEmitting, SetEmitting, bool, true, AM_DEFAULT);
+    URHO3D_ENUM_ACCESSOR_ATTRIBUTE("Trail Type", GetTrailType, SetTrailType, TrailType, trailTypeNames, TT_FACE_CAMERA, AM_DEFAULT);
     URHO3D_ACCESSOR_ATTRIBUTE("Tail Lifetime", GetLifetime, SetLifetime, float, 1.0f, AM_DEFAULT);
-    URHO3D_ACCESSOR_ATTRIBUTE("Tail Length", GetTailLength, SetTailLength, float, 0.1f, AM_DEFAULT);
-    URHO3D_ACCESSOR_ATTRIBUTE("Width", GetWidthScale, SetWidthScale, float, 0.2f, AM_DEFAULT);
-	URHO3D_ACCESSOR_ATTRIBUTE("Start Color", GetColorForHead, SetColorForHead, Color, Color::WHITE, AM_DEFAULT);
-	URHO3D_ACCESSOR_ATTRIBUTE("End Color", GetColorForTip, SetColorForTip, Color, Color::WHITE, AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("Tail Column", GetTailColumn, SetTailColumn, unsigned, 0, AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("Vertex Distance", GetVertexDistance, SetVertexDistance, float, 0.1f, AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("Width", GetWidth, SetWidth, float, 0.2f, AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("Start Scale", GetStartScale, SetStartScale, float, 1.0f, AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("End Scale", GetEndScale, SetEndScale, float, 1.0f, AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("Start Color", GetStartColor, SetStartColor, Color, Color::WHITE, AM_DEFAULT);
+    URHO3D_ACCESSOR_ATTRIBUTE("End Color", GetEndColor, SetEndColor, Color, Color(1.0f, 1.0f, 1.0f, 0.0f), AM_DEFAULT);
     URHO3D_ACCESSOR_ATTRIBUTE("Animation LOD Bias", GetAnimationLodBias, SetAnimationLodBias, float, 1.0f, AM_DEFAULT);
-    URHO3D_ACCESSOR_ATTRIBUTE("Match Node Rotation", GetMatchNodeOrientation, SetMatchNodeOrientation, bool, false, AM_DEFAULT);
     URHO3D_ACCESSOR_ATTRIBUTE("Sort By Distance", IsSorted, SetSorted, bool, false, AM_DEFAULT);
 }
 
@@ -122,7 +138,7 @@ void RibbonTrail::ProcessRayQuery(const RayOctreeQuery& query, PODVector<RayQuer
     for (unsigned i = 0; i < points_.Size() - 1; ++i)
     {
         Vector3 center = (points_[i].position_ + points_[i+1].position_) * 0.5f;
-        Vector3 scale = scale_ * Vector3::ONE;
+        Vector3 scale = width_ * Vector3::ONE;
         // Tail should be represented in cylinder shape, but we don't have this yet on Urho,
         // so this implementation will use bounding box instead (hopefully only temporarily)
         float distance = query.ray_.HitDistance(BoundingBox(center - scale, center + scale));
@@ -223,15 +239,19 @@ void RibbonTrail::UpdateTail()
         }
     }
 
+    // Update previous world position if trail is still zero
+    if (points_.Size() == 0)
+    {
+        previousPosition_ = worldPosition;
+    }
     // Delete lonely point
-    if(points_.Size() == 1)
+    else if(points_.Size() == 1)
     {
         points_.Erase(0, 1);
         previousPosition_ = worldPosition;
     }
-
-    // Update endtail position
-    if (points_.Size() > 1 && points_[0].lifetime_ < lifetime_)
+    // Update end of trail position using endTail linear interpolation
+    else if (points_.Size() > 1 && points_[0].lifetime_ < lifetime_)
     {
         float step = SmoothStep(startEndTailTime_, lifetime_, points_[0].lifetime_);
         points_[0].position_ = Lerp(endTail_.position_, points_[1].position_, step);
@@ -239,11 +259,9 @@ void RibbonTrail::UpdateTail()
     }
 
     // Add starting points
-    //if(points_.Size() == 0 && path > 0.01f)
-    if(points_.Size() == 0 && path > M_EPSILON)
+    if(points_.Size() == 0 && path > M_LARGE_EPSILON && emitting_)
     {
-        Vector3 forwardmotion = matchNode_ ?
-                    GetNode()->GetWorldDirection() : (previousPosition_ - worldPosition).Normalized();
+        Vector3 forwardmotion = (previousPosition_ - worldPosition).Normalized();
 
         Point startPoint;
         startPoint.position_ = previousPosition_;
@@ -255,6 +273,12 @@ void RibbonTrail::UpdateTail()
         nextPoint.lifetime_ = 0.0f;
         nextPoint.forward_ = forwardmotion;
 
+        if(node_->GetParent() != 0)
+        {
+            startPoint.parentPos_ = node_->GetParent()->GetWorldPosition();
+            nextPoint.parentPos_ = node_->GetParent()->GetWorldPosition();
+        }
+
         points_.Push(startPoint);
         points_.Push(nextPoint);
 
@@ -264,18 +288,20 @@ void RibbonTrail::UpdateTail()
     }
 
     // Add more points
-    if (points_.Size() > 1)
+    if (points_.Size() > 1 && emitting_)
     {
-        Vector3 forwardmotion = matchNode_ ?
-                    GetNode()->GetWorldDirection() : (previousPosition_ - worldPosition).Normalized();
+        Vector3 forwardmotion = (previousPosition_ - worldPosition).Normalized();
 
         // Add more point if path exceeded tail length
-        if(path > tailLength_)
+        if(path > vertexDistance_)
         {
             Point newPoint;
             newPoint.position_ = worldPosition;
             newPoint.lifetime_ = 0.0f;
             newPoint.forward_ = forwardmotion;
+            if(node_->GetParent() != 0)
+                newPoint.parentPos_ = node_->GetParent()->GetWorldPosition();
+
             points_.Push(newPoint);
 
             previousPosition_ = worldPosition;
@@ -290,9 +316,58 @@ void RibbonTrail::UpdateTail()
     }
 
     // Update buffer size if size of points different with tail number
-    if (points_.Size() != pointNum_)
+    if (points_.Size() != numPoints_)
         bufferSizeDirty_ = true;
 
+}
+
+void RibbonTrail::SetEndScale(float endScale)
+{
+    endScale_ = endScale;
+    Commit();
+}
+
+void RibbonTrail::SetStartScale(float startScale)
+{
+    startScale_ = startScale;
+    Commit();
+}
+
+void RibbonTrail::SetEmitting(bool emitting)
+{
+    if (emitting == emitting_)
+        return;
+
+    emitting_ = emitting;
+
+    // Reset already available points
+    if (emitting == true && points_.Size() > 0)
+    {
+        points_.Clear();
+        bufferSizeDirty_ = true;
+    }
+
+    Drawable::OnMarkedDirty(node_);
+    MarkNetworkUpdate();
+}
+
+void RibbonTrail::SetTailColumn(unsigned tailColumn)
+{
+    if(tailColumn > MAX_TAIL_COLUMN)
+    {
+        URHO3D_LOGINFO("Max tail column is " + String(MAX_TAIL_COLUMN));
+        tailColumn_ = MAX_TAIL_COLUMN;
+    }
+    else if (tailColumn < 1)
+    {
+        tailColumn_ = 1;
+    }
+    else
+        tailColumn_ = tailColumn;
+
+    Drawable::OnMarkedDirty(node_);
+    bufferSizeDirty_ = true;
+    MarkNetworkUpdate();
 }
 
 void RibbonTrail::UpdateBatches(const FrameInfo& frame) 
@@ -303,7 +378,7 @@ void RibbonTrail::UpdateBatches(const FrameInfo& frame)
 
     // Calculate scaled distance for animation LOD
     float scale = GetWorldBoundingBox().Size().DotProduct(DOT_SCALE);
-    // If there are no billboards, the size becomes zero, and LOD'ed updates no longer happen. Disable LOD in that case
+    // If there are no trail, the size becomes zero, and LOD'ed updates no longer happen. Disable LOD in that case
     if (scale > M_EPSILON)
         lodDistance_ = frame.camera_->GetLodDistance(distance_, scale, lodBias_);
     else
@@ -358,7 +433,7 @@ void RibbonTrail::OnWorldBoundingBoxUpdate()
     for (unsigned i = 0; i < points_.Size(); ++i)
     {
         Vector3 &p = points_[i].position_;
-        Vector3 scale = scale * Vector3::ONE;
+        Vector3 scale = width_ * Vector3::ONE;
         worldBox.Merge(BoundingBox(p - scale, p + scale));
     }
 
@@ -367,40 +442,72 @@ void RibbonTrail::OnWorldBoundingBoxUpdate()
 
 void RibbonTrail::UpdateBufferSize() 
 {
-    pointNum_ = points_.Size();
+    numPoints_ = points_.Size();
 
-    if (vertexBuffer_->GetVertexCount() != (pointNum_ * 4))
-        vertexBuffer_->SetSize((pointNum_ * 4),
+    unsigned indexPerSegment = 6 + (tailColumn_ - 1) * 6;
+    unsigned vertexPerSegment = 4 + (tailColumn_ - 1) * 2;
+
+    if(trailType_ == TT_FACE_CAMERA)
+    {
+        batches_[0].geometryType_ = GEOM_TRAIL_FACE_CAMERA;
+        vertexBuffer_->SetSize((numPoints_ * vertexPerSegment),
+            MASK_POSITION | MASK_COLOR | MASK_TEXCOORD1 | MASK_TANGENT, true);
+    }
+    else if(trailType_ == TT_BONE)
+    {
+        batches_[0].geometryType_ = GEOM_TRAIL_BONE;
+        vertexBuffer_->SetSize((numPoints_ * vertexPerSegment),
             MASK_POSITION | MASK_NORMAL | MASK_COLOR | MASK_TEXCOORD1 | MASK_TANGENT, true);
+    }
 
-    if (indexBuffer_->GetIndexCount() != ((pointNum_ - 1) * 6))
-        indexBuffer_->SetSize(((pointNum_ - 1) * 6), false);
+    if (indexBuffer_->GetIndexCount() != ((numPoints_ - 1) * indexPerSegment))
+        indexBuffer_->SetSize(((numPoints_ - 1) * indexPerSegment), false);
 
     bufferSizeDirty_ = false;
     bufferDirty_ = true;
     forceUpdate_ = true;
 
-    if (pointNum_ == 0)
+    if (numPoints_ == 0)
         return;
 
     // Indices do not change for a given tail generator capacity
-    unsigned short* dest = (unsigned short*)indexBuffer_->Lock(0, ((pointNum_ - 1) * 6), true);
+    unsigned short* dest = (unsigned short*)indexBuffer_->Lock(0, ((numPoints_ - 1) * indexPerSegment), true);
     if (!dest)
         return;
 
     unsigned vertexIndex = 0;
-    unsigned stripsLen = pointNum_ - 1;
+    unsigned stripsLen = numPoints_ - 1;
+
     while (stripsLen--)
     {
         dest[0] = (unsigned short)vertexIndex;
-        dest[1] = (unsigned short)(vertexIndex + 3);
+        dest[1] = (unsigned short)(vertexIndex + 2);
         dest[2] = (unsigned short)(vertexIndex + 1);
-        dest[3] = (unsigned short)vertexIndex;
-        dest[4] = (unsigned short)(vertexIndex + 3);
-        dest[5] = (unsigned short)(vertexIndex + 2);
+
+        dest[3] = (unsigned short)(vertexIndex + 1);
+        dest[4] = (unsigned short)(vertexIndex + 2);
+        dest[5] = (unsigned short)(vertexIndex + 3);
 
         dest += 6;
-        vertexIndex += 4;
+        //vertexIndex += 4;
+        vertexIndex += 2;
+
+        for (unsigned i = 0; i < (tailColumn_ - 1); ++i)
+        {
+            dest[0] = (unsigned short)vertexIndex;
+            dest[1] = (unsigned short)(vertexIndex + 2);
+            dest[2] = (unsigned short)(vertexIndex + 1);
+
+            dest[3] = (unsigned short)(vertexIndex + 1);
+            dest[4] = (unsigned short)(vertexIndex + 2);
+            dest[5] = (unsigned short)(vertexIndex + 3);
+
+            dest += 6;
+            vertexIndex += 2;
+        }
+
+       vertexIndex += 2;
+
     }
 
     indexBuffer_->Unlock();
@@ -423,19 +530,19 @@ void RibbonTrail::UpdateVertexBuffer(const FrameInfo& frame)
         }
     }
 
-    unsigned numPoints = points_.Size();
-
     // if tail path is short and nothing to draw, exit
-    if (numPoints < 2)
+    if (numPoints_ < 2)
     {
         batches_[0].geometry_->SetDrawRange(TRIANGLE_LIST, 0, 0, false);
         return;
     }
 
-    // Sort points
-    sortedPoints_.Resize(numPoints);
+    unsigned indexPerSegment = 6 + (tailColumn_ - 1) * 6;
+    unsigned vertexPerSegment = 4 + (tailColumn_ - 1) * 2;
 
-    for (unsigned i = 0; i < numPoints; ++i)
+    // Fill sorted points vector
+    sortedPoints_.Resize(numPoints_);
+    for (unsigned i = 0; i < numPoints_; ++i)
     {
         Point& point = points_[i];
         sortedPoints_[i] = &point;
@@ -443,79 +550,256 @@ void RibbonTrail::UpdateVertexBuffer(const FrameInfo& frame)
             point.sortDistance_ = frame.camera_->GetDistanceSquared(point.position_);
     }
 
+    // Sort points
     if (sorted_)
         Sort(sortedPoints_.Begin(), sortedPoints_.End(), CompareTails);
 
-    // Clear previous mesh data
-    tailMesh_.Clear();
-
     // Update individual trail elapsed length
     float trailLength = 0.0f;
-    for(unsigned i = 0; i < numPoints; ++i)
+    for(unsigned i = 0; i < numPoints_; ++i)
     {
         float length = i == 0 ? 0.0f : (points_[i].position_ - points_[i-1].position_).Length();
         trailLength += length;
         points_[i].elapsedLength_ = trailLength;
-        if(i < numPoints - 1)
+        if(i < numPoints_ - 1)
             points_[i].next_ = &points_[i+1];
     }
 
-    // generate strips of tris
-    TailVertex v;
-
-    // Forward part of tail (strip in xz plane)
-    for (unsigned i = 0; i < numPoints; ++i)
-    {
-        Point& point = *sortedPoints_[i];
-
-        if (sortedPoints_[i] == &points_.Back()) continue;
-
-        float factor = SmoothStep(0.0f, trailLength, point.elapsedLength_);
-
-        Color c = tailTipColor_.Lerp(tailHeadColor_, factor);
-        v.color_ = c.ToUInt();
-        v.direction_ = Vector4(point.forward_, 0.0f);
-        v.position_ = point.position_;
-
-        v.uv_ = Vector2(factor, 0.0f);
-        v.scale_ = Vector3::ONE * scale_;
-        tailMesh_.Push(v);
-
-        v.uv_ = Vector2(factor, 1.0f);
-        v.scale_ = Vector3::ONE * -scale_;
-        tailMesh_.Push(v);
-
-        // Next tail factor
-        factor = SmoothStep(0.0f, trailLength, point.next_->elapsedLength_);
-
-        // Next tail
-        c = tailTipColor_.Lerp(tailHeadColor_, factor);
-        v.color_ = c.ToUInt();
-        v.direction_ = Vector4(point.next_->forward_, 0.0f);
-        v.position_ = point.next_->position_;
-
-        v.uv_ = Vector2(factor, 0.0f);
-        v.scale_ = Vector3::ONE * scale_;
-        tailMesh_.Push(v);
-
-        v.uv_ = Vector2(factor, 1.0f);
-        v.scale_ = Vector3::ONE * -scale_;
-        tailMesh_.Push(v);
-
-    }
-
-    // copy new mesh to vertex buffer
-    unsigned meshVertexCount = tailMesh_.Size();
-    batches_[0].geometry_->SetDrawRange(TRIANGLE_LIST, 0, (numPoints - 1) * 6, false);
+    batches_[0].geometry_->SetDrawRange(TRIANGLE_LIST, 0, (numPoints_ - 1) * indexPerSegment, false);
     bufferDirty_ = false;
     forceUpdate_ = false;
 
-    // get pointer
-    TailVertex* dest = (TailVertex*)vertexBuffer_->Lock(0, meshVertexCount, true);
+    float* dest = (float*)vertexBuffer_->Lock(0, (numPoints_ - 1) * vertexPerSegment, true);
     if (!dest)
         return;
-    // copy to vertex buffer
-    memcpy(dest, &tailMesh_[0], meshVertexCount * sizeof(TailVertex));
+
+    // Generate trail mesh
+    if (trailType_ == TT_FACE_CAMERA)
+    {
+        for (unsigned i = 0; i < numPoints_; ++i)
+        {
+            Point& point = *sortedPoints_[i];
+
+            if (sortedPoints_[i] == &points_.Back()) continue;
+
+            // This point
+            float factor = SmoothStep(0.0f, trailLength, point.elapsedLength_);
+            unsigned c = endColor_.Lerp(startColor_, factor).ToUInt();
+            float width = Lerp(width_ * endScale_, width_ * startScale_, factor);
+
+            // Next point
+            float nextFactor = SmoothStep(0.0f, trailLength, point.next_->elapsedLength_);
+            unsigned nextC = endColor_.Lerp(startColor_, nextFactor).ToUInt();
+            float nextWidth = Lerp(width_ * endScale_, width_ * startScale_, nextFactor);
+
+            // First row
+            dest[0] = point.position_.x_;
+            dest[1] = point.position_.y_;
+            dest[2] = point.position_.z_;
+            ((unsigned&)dest[3]) = c;
+            dest[4] = factor;
+            dest[5] = 0.0f;
+            dest[6] = point.forward_.x_;
+            dest[7] = point.forward_.y_;
+            dest[8] = point.forward_.z_;
+            dest[9] = width;
+
+            dest[10] = point.next_->position_.x_;
+            dest[11] = point.next_->position_.y_;
+            dest[12] = point.next_->position_.z_;
+            ((unsigned&)dest[13]) = nextC;
+            dest[14] = nextFactor;
+            dest[15] = 0.0f;
+            dest[16] = point.next_->forward_.x_;
+            dest[17] = point.next_->forward_.y_;
+            dest[18] = point.next_->forward_.z_;
+            dest[19] = nextWidth;
+
+            dest += 20;
+
+            // Middle rows
+            for (unsigned j = 0; j < (tailColumn_ - 1); ++j)
+            {
+                float elapsed = 1.0f / tailColumn_ * (j + 1);
+                float scale = width_ - elapsed * 2.0f * width_;
+                float midWidth = width - elapsed * 2.0f * width;
+                float nextMidWidth = nextWidth - elapsed * 2.0f * nextWidth;
+
+                dest[0] = point.position_.x_;
+                dest[1] = point.position_.y_;
+                dest[2] = point.position_.z_;
+                ((unsigned&)dest[3]) = c;
+                dest[4] = factor;
+                dest[5] = elapsed;
+                dest[6] = point.forward_.x_;
+                dest[7] = point.forward_.y_;
+                dest[8] = point.forward_.z_;
+                dest[9] = midWidth;
+
+                dest[10] = point.next_->position_.x_;
+                dest[11] = point.next_->position_.y_;
+                dest[12] = point.next_->position_.z_;
+                ((unsigned&)dest[13]) = nextC;
+                dest[14] = nextFactor;
+                dest[15] = elapsed;
+                dest[16] = point.next_->forward_.x_;
+                dest[17] = point.next_->forward_.y_;
+                dest[18] = point.next_->forward_.z_;
+                dest[19] = nextMidWidth;
+
+                dest += 20;
+            }
+
+            // Last row
+            dest[0] = point.position_.x_;
+            dest[1] = point.position_.y_;
+            dest[2] = point.position_.z_;
+            ((unsigned&)dest[3]) = c;
+            dest[4] = factor;
+            dest[5] = 1.0f;
+            dest[6] = point.forward_.x_;
+            dest[7] = point.forward_.y_;
+            dest[8] = point.forward_.z_;
+            dest[9] = -width;
+
+            dest[10] = point.next_->position_.x_;
+            dest[11] = point.next_->position_.y_;
+            dest[12] = point.next_->position_.z_;
+            ((unsigned&)dest[13]) = nextC;
+            dest[14] = nextFactor;
+            dest[15] = 1.0f;
+            dest[16] = point.next_->forward_.x_;
+            dest[17] = point.next_->forward_.y_;
+            dest[18] = point.next_->forward_.z_;
+            dest[19] = -nextWidth;
+
+            dest += 20;
+        }
+    }
+    else if(trailType_ == TT_BONE)
+    {
+        for (unsigned i = 0; i < numPoints_; ++i)
+        {
+            Point& point = *sortedPoints_[i];
+
+            if (sortedPoints_[i] == &points_.Back()) continue;
+
+            // This point
+            float factor = SmoothStep(0.0f, trailLength, point.elapsedLength_);
+            unsigned c = endColor_.Lerp(startColor_, factor).ToUInt();
+            //float scale = factor
+
+            float rightScale = Lerp(endScale_, startScale_, factor);
+            float shift = (rightScale - 1.0f) / 2.0f;
+            float leftScale = 0.0f - shift;
+
+            // Next point
+            float nextFactor = SmoothStep(0.0f, trailLength, point.next_->elapsedLength_);
+            unsigned nextC = endColor_.Lerp(startColor_, nextFactor).ToUInt();
+
+            float nextRightScale = Lerp(endScale_, startScale_, nextFactor);
+            float nextShift = (nextRightScale - 1.0f) / 2.0f;
+            float nextLeftScale = 0.0f - nextShift;
+
+            // First row
+            dest[0] = point.position_.x_;
+            dest[1] = point.position_.y_;
+            dest[2] = point.position_.z_;
+            dest[3] = point.forward_.x_;
+            dest[4] = point.forward_.y_;
+            dest[5] = point.forward_.z_;
+            ((unsigned&)dest[6]) = c;
+            dest[7] = factor;
+            dest[8] = 0.0f;
+            dest[9] = point.parentPos_.x_;
+            dest[10] = point.parentPos_.y_;
+            dest[11] = point.parentPos_.z_;
+            dest[12] = leftScale;
+
+            dest[13] = point.next_->position_.x_;
+            dest[14] = point.next_->position_.y_;
+            dest[15] = point.next_->position_.z_;
+            dest[16] = point.next_->forward_.x_;
+            dest[17] = point.next_->forward_.y_;
+            dest[18] = point.next_->forward_.z_;
+            ((unsigned&)dest[19]) = nextC;
+            dest[20] = nextFactor;
+            dest[21] = 0.0f;
+            dest[22] = point.next_->parentPos_.x_;
+            dest[23] = point.next_->parentPos_.y_;
+            dest[24] = point.next_->parentPos_.z_;
+            dest[25] = nextLeftScale;
+
+            dest += 26;
+
+            // Middle row
+            for (unsigned j = 0; j < (tailColumn_ - 1); ++j)
+            {
+                float elapsed = 1.0f / tailColumn_ * (j + 1);
+
+                dest[0] = point.position_.x_;
+                dest[1] = point.position_.y_;
+                dest[2] = point.position_.z_;
+                dest[3] = point.forward_.x_;
+                dest[4] = point.forward_.y_;
+                dest[5] = point.forward_.z_;
+                ((unsigned&)dest[6]) = c;
+                dest[7] = factor;
+                dest[8] = elapsed;
+                dest[9] = point.parentPos_.x_;
+                dest[10] = point.parentPos_.y_;
+                dest[11] = point.parentPos_.z_;
+                dest[12] = Lerp(leftScale, rightScale, elapsed);
+
+                dest[13] = point.next_->position_.x_;
+                dest[14] = point.next_->position_.y_;
+                dest[15] = point.next_->position_.z_;
+                dest[16] = point.next_->forward_.x_;
+                dest[17] = point.next_->forward_.y_;
+                dest[18] = point.next_->forward_.z_;
+                ((unsigned&)dest[19]) = nextC;
+                dest[20] = nextFactor;
+                dest[21] = elapsed;
+                dest[22] = point.next_->parentPos_.x_;
+                dest[23] = point.next_->parentPos_.y_;
+                dest[24] = point.next_->parentPos_.z_;
+                dest[25] = Lerp(nextLeftScale, nextRightScale, elapsed);
+
+                dest += 26;
+            }
+
+            // Last row
+            dest[0] = point.position_.x_;
+            dest[1] = point.position_.y_;
+            dest[2] = point.position_.z_;
+            dest[3] = point.forward_.x_;
+            dest[4] = point.forward_.y_;
+            dest[5] = point.forward_.z_;
+            ((unsigned&)dest[6]) = c;
+            dest[7] = factor;
+            dest[8] = 1.0f;
+            dest[9] = point.parentPos_.x_;
+            dest[10] = point.parentPos_.y_;
+            dest[11] = point.parentPos_.z_;
+            dest[12] = rightScale;
+
+            dest[13] = point.next_->position_.x_;
+            dest[14] = point.next_->position_.y_;
+            dest[15] = point.next_->position_.z_;
+            dest[16] = point.next_->forward_.x_;
+            dest[17] = point.next_->forward_.y_;
+            dest[18] = point.next_->forward_.z_;
+            ((unsigned&)dest[19]) = nextC;
+            dest[20] = nextFactor;
+            dest[21] = 1.0f;
+            dest[22] = point.next_->parentPos_.x_;
+            dest[23] = point.next_->parentPos_.y_;
+            dest[24] = point.next_->parentPos_.z_;
+            dest[25] = nextRightScale;
+
+            dest += 26;
+        }
+    }
 
     vertexBuffer_->Unlock();
     vertexBuffer_->ClearDataLost();
@@ -527,27 +811,21 @@ void RibbonTrail::SetLifetime(float time)
     Commit();
 }
 
-void RibbonTrail::SetTailLength(float length) 
+void RibbonTrail::SetVertexDistance(float length)
 {
-    tailLength_ = length;
+    vertexDistance_ = length;
     Commit();
 }
 
-void RibbonTrail::SetColorForTip(const Color& c)
+void RibbonTrail::SetEndColor(const Color& c)
 {
-    tailTipColor_ = Color(c.r_, c.g_, c.b_, c.a_);
+    endColor_ = Color(c.r_, c.g_, c.b_, c.a_);
     Commit();
 }
 
-void RibbonTrail::SetColorForHead(const Color& c)
+void RibbonTrail::SetStartColor(const Color& c)
 {
-    tailHeadColor_ = Color(c.r_, c.g_, c.b_, c.a_);
-    Commit();
-}
-
-void RibbonTrail::SetMatchNodeOrientation(bool value)
-{
-    matchNode_ = value;
+    startColor_ = Color(c.r_, c.g_, c.b_, c.a_);
     Commit();
 }
 
@@ -557,6 +835,24 @@ void RibbonTrail::SetSorted(bool enable)
     Commit();
 }
 
+void RibbonTrail::SetTrailType(TrailType type)
+{
+    if (trailType_ == type)
+        return;
+
+    if (type == TT_BONE && (node_->GetParent() == 0 || node_->GetParent() == node_->GetScene()))
+    {
+        URHO3D_LOGWARNING("No parent node found, revert back to Face Camera type");
+        return;
+    }
+
+    trailType_ = type;
+    //Commit();
+    Drawable::OnMarkedDirty(node_);
+    bufferSizeDirty_ = true;
+    MarkNetworkUpdate();
+}
+
 void RibbonTrail::SetMaterialAttr(const ResourceRef& value)
 {
     ResourceCache* cache = GetSubsystem<ResourceCache>();
@@ -564,9 +860,9 @@ void RibbonTrail::SetMaterialAttr(const ResourceRef& value)
     Commit();
 }
 
-void RibbonTrail::SetWidthScale(float scale)
+void RibbonTrail::SetWidth(float width)
 {
-    scale_ = scale;
+    width_ = width;
     Commit();
 }
 
@@ -586,6 +882,11 @@ void RibbonTrail::MarkPositionsDirty()
 {
     Drawable::OnMarkedDirty(node_);
     bufferDirty_ = true;
+}
+
+Material* RibbonTrail::GetMaterial() const
+{
+    return batches_[0].material_;
 }
 
 ResourceRef RibbonTrail::GetMaterialAttr() const

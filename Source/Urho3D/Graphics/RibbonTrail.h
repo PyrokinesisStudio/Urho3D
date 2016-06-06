@@ -27,32 +27,36 @@
 namespace Urho3D
 {
 
+enum TrailType
+{
+    TT_FACE_CAMERA = 0,
+    TT_BONE
+};
+
 class IndexBuffer;
 class VertexBuffer;
 
-/// Vertex struct for tail  
-struct URHO3D_API TailVertex
+/// Trail is consisting of series of tails. Two connected points make a tail.
+//struct URHO3D_API Point
+struct Point
 {
+    /// Position.
     Vector3 position_;
-    Vector3 scale_;
-    unsigned color_;
-    Vector2 uv_;
-    Vector4 direction_;
-};
-
-/// Trail is consisting of series of point
-struct URHO3D_API Point
-{
-    Vector3 position_;
+    /// Forward vector.
     Vector3 forward_;
+    /// Parent position. Trail bone type uses this.
+    Vector3 parentPos_;
+    /// Elapsed length inside the trail.
     float elapsedLength_;
+    /// Next point to make a tail.
     Point* next_;
-
+    /// Tail time to live.
     float lifetime_;
+    /// Distance for sorting.
     float sortDistance_;
 };
 
-static const unsigned MAX_TAILS = 65536 / 6;
+//static const unsigned MAX_TAILS = 65536 / 6;
 
 /// Custom component that creates a tail
 class URHO3D_API RibbonTrail : public Drawable
@@ -70,7 +74,7 @@ public:
     virtual void ProcessRayQuery(const RayOctreeQuery& query, PODVector<RayQueryResult>& results);
     /// Handle enabled/disabled state change.
     virtual void OnSetEnabled();
-    ///
+    /// Update before octree reinsertion. Is called from a main thread.
     virtual void Update(const FrameInfo &frame);
     /// Calculate distance and prepare batches for rendering. May be called from worker thread(s), possibly re-entrantly.
     virtual void UpdateBatches(const FrameInfo& frame);
@@ -81,55 +85,76 @@ public:
 
     /// Set material.
     void SetMaterial(Material* material);
-    /// Set tail segment length
-    void SetTailLength(float length);
-    /// Get tail segment length
-    float GetTailLength();
-    /// Set count segments of all tail 
-    //void SetNumTails(unsigned num);
-    /// Set width scale of the tail
-    void SetWidthScale(float scale);
-    /// Set vertex blended color for tip of all tail.
-    void SetColorForTip(const Color& c);
-    // Set vertex blended color for head of all tail.
-    void SetColorForHead(const Color& c);
     /// Set material attribute.
     void SetMaterialAttr(const ResourceRef& value);
-    /// Return material attribute.
-    ResourceRef GetMaterialAttr() const;
-    /// Set whether billboards are sorted by distance. Default false.
+    /// Set distance between points.
+    void SetVertexDistance(float length);
+    /// Set width of the tail. Only works for face camera trail type.
+    void SetWidth(float width);
+    /// Set vertex blended color for start of trail.
+    void SetStartColor(const Color& c);
+    /// Set vertex blended scale for end of trail.
+    void SetEndColor(const Color& c);
+    /// Set vertex blended color for start of trail.
+    void SetStartScale(float startScale);
+    /// Set vertex blended scale for end of trail.
+    void SetEndScale(float endScale);
+    /// Set how the trail behave.
+    void SetTrailType(TrailType type);
+    /// Set whether tails are sorted by distance. Default false.
     void SetSorted(bool enable);
-    ///
+    /// Set tail time to live.
     void SetLifetime(float time);
+    /// Set whether trail should be emitting.
+    void SetEmitting(bool emitting);
+    /// Set number of column for every tails. Can be useful for fixing distortion at high angle.
+    void SetTailColumn(unsigned tailColumn);
     /// Set animation LOD bias.
     void SetAnimationLodBias(float bias);
     /// Mark for bounding box and vertex buffer update. Call after modifying the trails.
     void Commit();
 
-    /// Get whether or not this tail is matching node direction vectors
-    bool GetMatchNodeOrientation() const { return matchNode_; }
-    /// Set whether or not this tail is matching node direction vectors
-    void SetMatchNodeOrientation(bool value);
-    ///
-    //void SetWidthChange(float widthDeltaPerSecond);
-	///
-    float GetWidthScale() const { return scale_; }
-    /// Get count segments of all tail
-    //unsigned  GetNumTails() const { return tailNum_; }
-    ///
-    float GetTailLength() const { return tailLength_;  }
-    ///
-    const Color& GetColorForHead() const { return tailHeadColor_; }
-    ///
-    const Color& GetColorForTip() const { return tailTipColor_;  }
-    ///
-    //float GetWidthChange() const {return deltaWidth_;}
+    /// Return material.
+    Material* GetMaterial() const;
+
+    /// Return material attribute.
+    ResourceRef GetMaterialAttr() const;
+
+    /// Get distance between points.
+    float GetVertexDistance() const { return vertexDistance_;  }
+
+    /// Get width of the trail.
+    float GetWidth() const { return width_; }
+
+    /// Get vertex blended color for start of trail.
+    const Color& GetStartColor() const { return startColor_; }
+
+    /// Get vertex blended color for end of trail.
+    const Color& GetEndColor() const { return endColor_;  }
+
+    /// Get vertex blended scale for start of trail.
+    float GetStartScale() const { return startScale_; }
+
+    /// Get vertex blended scale for end of trail.
+    float GetEndScale() const { return endScale_; }
+
     /// Return whether tails are sorted.
     bool IsSorted() const { return sorted_; }
-    ///
+
+    /// Return tail time to live.
     float GetLifetime() const {return lifetime_;}
+
     /// Return animation LOD bias.
     float GetAnimationLodBias() const { return animationLodBias_; }
+
+    /// Return how the trail behave.
+    TrailType GetTrailType() const { return trailType_; }
+
+    /// Get number of column for tails.
+    unsigned GetTailColumn() const { return tailColumn_; }
+
+    /// Return whether is currently emitting.
+    bool IsEmitting() const { return emitting_ ; }
 
 protected:
     /// Handle node being assigned.
@@ -146,6 +171,8 @@ protected:
     float animationLodBias_;
     /// Animation LOD timer.
     float animationLodTimer_;
+    /// Trail type.
+    TrailType trailType_;
 
 private:
     /// Handle scene post-update event.
@@ -169,37 +196,32 @@ private:
     bool bufferSizeDirty_;
     /// Vertex buffer needs rewrite flag.
     bool bufferDirty_;
-	///
-	bool matchNode_;
-	///
     /// Previous position of tail
     Vector3 previousPosition_;
-    ///
-	float tailLength_;
-    ///
-	float scale_;
-	///
-    //unsigned tailNum_;
-    ///
-    unsigned pointNum_;
-	///
-    Vector<TailVertex> tailMesh_;
-	///
-    Color tailTipColor_;
-    ///
-    Color tailHeadColor_;
+    /// Distance between points. Basically is tail length.
+    float vertexDistance_;
+    /// Width of trail.
+    float width_;
+    /// Number of points.
+    unsigned numPoints_;
+    /// Color for start of trails.
+    Color startColor_;
+    /// Color for end of trails.
+    Color endColor_;
+    /// Scale for start of trails.
+    float startScale_;
+    /// End for start of trails.
+    float endScale_;
     /// Last scene timestep.
     float lastTimeStep_;
-    /// Delta width
-    //float deltaWidth_;
     // Lifetime
     float lifetime_;
+    /// Number of columns for every tails.
+    unsigned tailColumn_;
     /// Rendering framenumber on which was last updated.
     unsigned lastUpdateFrameNumber_;
     /// Need update flag.
     bool needUpdate_;
-    /// Sorting flag. Triggers a vertex buffer rewrite for each view this tails is rendered from.
-    //bool sortThisFrame_;
     /// Frame number on which was last sorted.
     unsigned sortFrameNumber_;
     /// Previous offset to camera for determining whether sorting is necessary.
@@ -208,8 +230,12 @@ private:
     Vector<Point*> sortedPoints_;
     /// Force update flag (ignore animation LOD momentarily.)
     bool forceUpdate_;
+    /// Currently emitting flag.
+    bool emitting_;
 
+    /// End of trail point for smoother tail dissapearance.
     Point endTail_;
+    /// The time the tail become end of trail.
     float startEndTailTime_;
 };
 
