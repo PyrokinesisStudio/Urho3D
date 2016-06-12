@@ -59,7 +59,7 @@ enum GeometryType
     GEOM_TRAIL_FACE_CAMERA = 5,
     GEOM_TRAIL_BONE = 6,
     GEOM_STATIC_NOINSTANCING = 7,
-    MAX_GEOMETRYTYPES = 8,
+    MAX_GEOMETRYTYPES = 7,
 };
 
 /// Blending mode.
