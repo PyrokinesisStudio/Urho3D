@@ -60,6 +60,7 @@
 #include "../../IO/Log.h"
 #include "../../Resource/ResourceCache.h"
 
+#include <SDL/SDL.h>
 #include <SDL/SDL_syswm.h>
 
 #include "../../DebugNew.h"
